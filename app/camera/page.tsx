@@ -1,32 +1,28 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform, Alert } from "react-native";
-import { Camera, CameraType } from "expo-camera";
+import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform, Alert, Button } from "react-native";
+import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
 import Webcam from "react-webcam";
 
 export default function CameraPage() {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  // Gunakan hook useCameraPermissions untuk meminta izin
+  const [permission, requestPermission] = useCameraPermissions();
+  const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
+
   const [cameraRef, setCameraRef] = useState<any>(null);
   const [image, setImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [prediction, setPrediction] = useState<string | null>(null);
   const webcamRef = useRef<Webcam>(null);
+  const [facing, setFacing] = useState<CameraType>("back");
 
   useEffect(() => {
-    (async () => {
-      if (Platform.OS !== "web") {
-        const { status } = await Camera.requestCameraPermissionsAsync();
-        setHasPermission(status === "granted");
-
-        const mediaLibraryStatus = await MediaLibrary.requestPermissionsAsync();
-        if (mediaLibraryStatus.status !== "granted") {
-          alert("Izin media diperlukan untuk menyimpan foto");
-        }
-      }
-    })();
-  }, []);
+    if (Platform.OS !== "web" && !mediaPermission?.granted) {
+      requestMediaPermission();
+    }
+  }, [mediaPermission]);
 
   const takePicture = async () => {
     if (Platform.OS === "web") {
@@ -35,8 +31,13 @@ export default function CameraPage() {
         setImage(imageSrc);
       }
     } else if (cameraRef) {
-      const photo = await cameraRef.takePictureAsync();
-      setImage(photo.uri);
+      try {
+        const photo = await cameraRef.takePictureAsync();
+        setImage(photo.uri);
+      } catch (error) {
+        console.error("Error taking picture:", error);
+        Alert.alert("Error", "Gagal mengambil foto");
+      }
     }
   };
 
@@ -82,7 +83,7 @@ export default function CameraPage() {
         } as any);
       }
 
-      const response = await axios.post("http://127.0.0.1:8000/predict/", formData, {
+      const response = await axios.post("http://192.168.110.203:8000/predict", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
@@ -99,6 +100,12 @@ export default function CameraPage() {
     }
   };
 
+  // Fungsi untuk membalik kamera
+  const toggleCameraFacing = () => {
+    setFacing((current) => (current === "back" ? "front" : "back"));
+  };
+
+  // Render untuk platform web
   if (Platform.OS === "web") {
     return (
       <View style={styles.container}>
@@ -138,24 +145,39 @@ export default function CameraPage() {
     );
   }
 
-  if (hasPermission === null) {
+  // Periksa izin kamera untuk platform native
+  if (!permission) {
+    // Izin kamera masih dimuat
     return (
       <View style={styles.centeredContainer}>
         <Text>Memeriksa izin...</Text>
       </View>
     );
   }
-  if (hasPermission === false) {
+
+  if (!permission.granted) {
+    // Izin kamera belum diberikan
     return (
       <View style={styles.centeredContainer}>
-        <Text>Tidak ada izin kamera</Text>
+        <Text style={styles.message}>Kami membutuhkan izin untuk mengakses kamera</Text>
+        <Button onPress={requestPermission} title="Berikan Izin" />
       </View>
     );
   }
 
+  // Render untuk platform native dengan izin kamera diberikan
   return (
     <View style={styles.container}>
-      {!image ? <Camera style={styles.camera} type={CameraType.back} ref={(ref: typeof Camera | null) => setCameraRef(ref)} /> : <Image source={{ uri: image }} style={styles.preview} />}
+      {!image ? (
+        <CameraView style={styles.camera} facing={facing} ref={(ref) => setCameraRef(ref)}>
+          {/* Tombol untuk membalik kamera */}
+          <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
+            <Text style={styles.flipText}>🔄</Text>
+          </TouchableOpacity>
+        </CameraView>
+      ) : (
+        <Image source={{ uri: image }} style={styles.preview} />
+      )}
 
       <View style={styles.predictionContainer}>
         {prediction && (
@@ -201,6 +223,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
+  },
+  message: {
+    textAlign: "center",
+    marginBottom: 20,
+    fontSize: 16,
   },
   camera: {
     flex: 1,
@@ -252,5 +280,21 @@ const styles = StyleSheet.create({
   },
   predictionContent: {
     fontSize: 14,
+  },
+  flipButton: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 30,
+    padding: 10,
+    width: 50,
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  flipText: {
+    color: "white",
+    fontSize: 20,
   },
 });

@@ -5,6 +5,7 @@ import * as MediaLibrary from "expo-media-library";
 import * as ImagePicker from "expo-image-picker";
 import axios from "axios";
 import Webcam from "react-webcam";
+import { apiConfig } from "@/config/environment";
 
 export default function CameraPage() {
   // Gunakan hook useCameraPermissions untuk meminta izin
@@ -83,7 +84,11 @@ export default function CameraPage() {
         } as any);
       }
 
-      const response = await axios.post("http://192.168.110.203:8000/predict", formData, {
+      // Gunakan URL dari konfigurasi environment
+      const predictUrl = apiConfig.getFullUrl(apiConfig.endpoints.predict);
+      console.log(`Sending request to: ${predictUrl}`);
+
+      const response = await axios.post(predictUrl, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },

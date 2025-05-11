@@ -31,8 +31,8 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SafeAreaProvider>
-      <Slot />
-    </SafeAreaProvider>
+        <Stack />
+      </SafeAreaProvider>
     </ThemeProvider>
   );
 }

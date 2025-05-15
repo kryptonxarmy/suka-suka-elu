@@ -31,7 +31,12 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <SafeAreaProvider>
-        <Stack />
+        <Stack initialRouteName="splashscreen/splash">
+          <Stack.Screen
+            name="splashscreen/splash"
+            options={{ headerShown: false }}
+          />
+        </Stack>
       </SafeAreaProvider>
     </ThemeProvider>
   );

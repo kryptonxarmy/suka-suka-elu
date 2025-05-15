@@ -4,13 +4,13 @@
     "slug": "berrycare",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/Stroberi-splash.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/splash.png",
+      "image": "./assets/images/Stroberi-splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FAF0E6"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -35,11 +35,20 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
+          "expo": {
+            "name": "BerryCare",
+            "slug": "berrycare",
+            "version": "1.0.0",
+            "orientation": "portrait",
+            "backgroundColor": "#FAF0E6", 
+            "splash": {
+              "image": "assets/images/Stroberi-splash.png",
+              "resizeMode": "contain",
+              "backgroundColor": "#FAF0E6", 
+              "imageResizeMode": "contain"
+            }
+          }
+        }        
       ],
       [
         "expo-camera",

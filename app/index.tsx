@@ -24,7 +24,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView>
         {/* Header */}
         <View style={styles.header}>
           <Image
@@ -97,10 +97,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFF5E4", // warna cream
-  },
-  scroll: {
-    // padding: 20,
-    // paddingBottom: 100,
   },
   header: {
     flexDirection: "row",

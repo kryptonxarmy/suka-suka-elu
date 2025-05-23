@@ -10,7 +10,7 @@ import Webcam from "react-webcam";
 import { PREDICT_URL } from '../config/api';
 import { useRouter } from 'expo-router';
 import * as Network from '@react-native-community/netinfo';
-import ModelLoader from '../utils/ml/ModelLoader';
+import ModelLoader from '../../utils/ml/ModelLoader';
 
 // Define types for API response
 interface PredictionResponse {

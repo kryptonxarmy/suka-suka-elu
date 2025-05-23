@@ -21,9 +21,48 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/ada/imagesptiv/imagese-ic/imageson.png",
-        "backgroundColor": "#ffffff"
-      }
+        "foregroundImage": "./assets/images/Stroberi-splash.png",
+        "backgroundColor": "#FAF0E6"
+      },
+      "package": "com.rasya02.berrycare",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.MEDIA_LIBRARY",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET"
+      ]
+    },
+    "androidStatusBar": {
+      "backgroundColor": "#FAF0E6"
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    },
+    "androidx": true,
+    "jsEngine": "hermes",
+    "androidManifest": {
+      "android:usesCleartextTraffic": true,
+      "android:allowBackup": false,
+      "android:networkSecurityConfig": "@xml/network_security_config",
+      "android:debuggable": false,
+      "android:installLocation": "auto",
+      "android:icon": "@mipmap/ic_launcher",
+      "android:label": "@string/app_name",
+      "android:theme": "@style/AppTheme",
+      "android:usesCleartextTraffic": true,
+      "android:largeHeap": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.MEDIA_LIBRARY",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET"
+      ],
+      "package": "com.rasya02.berrycare"
     },
     "web": {
       "bundler": "metro",
@@ -40,15 +79,15 @@
             "slug": "berrycare",
             "version": "1.0.0",
             "orientation": "portrait",
-            "backgroundColor": "#FAF0E6", 
+            "backgroundColor": "#FAF0E6",
             "splash": {
               "image": "assets/images/Stroberi-splash.png",
               "resizeMode": "contain",
-              "backgroundColor": "#FAF0E6", 
+              "backgroundColor": "#FAF0E6",
               "imageResizeMode": "contain"
             }
           }
-        }        
+        }
       ],
       [
         "expo-camera",
@@ -61,10 +100,32 @@
       "expo-media-library",
       "expo-image-picker",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-file-system",
+        {
+          "filePermission": "Aplikasi memerlukan akses untuk menyimpan gambar."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos.",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "37af259a-85e8-44f0-8edc-bd7b9d015f48"
+      }
+    },
+    "assets": [
+      "./assets/model/*"
+    ]
   }
 }

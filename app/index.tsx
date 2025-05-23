@@ -80,7 +80,7 @@ export default function HomeScreen() {
       {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity>
-          <Feather name="more-horizontal" size={24} color="#6b4f4f" />
+          <Feather name="info" size={24} color="#6b4f4f" />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push("/camera/page")}>
           <FontAwesome5 name="camera-retro" size={24} color="#6b4f4f" />

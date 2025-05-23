@@ -1,12 +1,68 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform, Alert, Button, ScrollView, SafeAreaView} from "react-native";
+import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform, Alert, Button, ScrollView, SafeAreaView } from "react-native";
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
 import axios from "axios";
 import Webcam from "react-webcam";
 import { PREDICT_URL } from '../config/api';
 import { useRouter } from 'expo-router';
+import * as Network from '@react-native-community/netinfo';
+import ModelLoader from '../utils/ml/ModelLoader';
+
+// Define types for API response
+interface PredictionResponse {
+  data: {
+    label: string;
+    confidence: number;
+    message: string;
+  };
+}
+
+// Update the FileInfo interface
+interface FileInfo {
+  exists: boolean;
+  uri: string;
+  isDirectory: boolean;
+  size?: number;  // Make size optional since it's not always available
+}
+
+// Add compression options type
+interface CompressionOptions {
+  maxWidth: number;
+  maxHeight: number;
+  quality: number;
+}
+
+// Add AppMode type
+type AppMode = 'online' | 'offline';
+
+// Update the compressImage function to handle optional size
+const compressImage = async (uri: string, options: CompressionOptions) => {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: options.maxWidth, height: options.maxHeight } }],
+      { compress: options.quality, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    
+    // Get file info with size parameter
+    const fileInfo = await FileSystem.getInfoAsync(result.uri, { size: true });
+    
+    console.log('Compressed image:', {
+      originalUri: uri,
+      compressedUri: result.uri,
+      size: fileInfo.exists && 'size' in fileInfo ? fileInfo.size : 'unknown'
+    });
+    
+    return result.uri;
+  } catch (error) {
+    console.error('Kompresi gambar gagal:', error);
+    throw error;
+  }
+};
 
 export default function CameraPage() {
   const router = useRouter();
@@ -21,33 +77,40 @@ export default function CameraPage() {
   const [facing, setFacing] = useState<CameraType>("back");
   const [cameraHeight, setCameraHeight] = useState<number>(0);
   const [showResult, setShowResult] = useState(false);
+  const [appMode, setAppMode] = useState<AppMode>('online');
+  const [isOnline, setIsOnline] = useState(true);
+  const [isModelReady, setIsModelReady] = useState(false);
+
+  // Add new states
+  const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [predictionTime, setPredictionTime] = useState<number>(0);
 
   const diseaseInfo = {
     "Powdery Mildew": {
       title: "Powdery Mildew",
       description:
-        "Disebabkan oleh jamur *Podosphaera aphanis*, muncul sebagai lapisan putih seperti bedak pada daun. Menyukai kondisi hangat dan lembap.",
+        "Disebabkan oleh jamur 'Podosphaera aphanis', muncul sebagai lapisan putih seperti bedak pada daun. Menyukai kondisi hangat dan lembap.",
       solution:
         "Gunakan fungisida sulfur atau kalium bikarbonat. Tingkatkan sirkulasi udara. Hindari penyiraman malam hari.",
     },
     "Blossom Blight": {
       title: "Blossom Blight",
       description:
-        "Disebabkan oleh *Botrytis cinerea*, menyerang bunga saat cuaca lembap. Bunga berubah coklat dan layu.",
+        "Disebabkan oleh 'Botrytis cinerea', menyerang bunga saat cuaca lembap. Bunga berubah coklat dan layu.",
       solution:
         "Buang bunga yang terinfeksi. Gunakan fungisida seperti klorotalonil. Jaga jarak antar tanaman dan drainase.",
     },
     "Angular Leaf Spot": {
       title: "Angular Leaf Spot",
       description:
-        "Disebabkan oleh *Xanthomonas fragariae*. Gejala berupa bercak bening berbentuk sudut pada daun.",
+        "Disebabkan oleh 'Xanthomonas fragariae'. Gejala berupa bercak bening berbentuk sudut pada daun.",
       solution:
         "Gunakan bibit sehat. Semprot dengan fungisida tembaga. Kurangi kelembapan dengan irigasi tetes.",
     },
     "Gray Mold": {
       title: "Gray Mold",
       description:
-        "Disebabkan oleh *Botrytis cinerea*, menyebabkan lapisan abu-abu berbulu pada buah dan bunga.",
+        "Disebabkan oleh 'Botrytis cinerea', menyebabkan lapisan abu-abu berbulu pada buah dan bunga.",
       solution:
         "Pangkas bagian terinfeksi. Gunakan fungisida sebelum berbunga. Jaga agar buah tidak menyentuh tanah.",
     },
@@ -61,17 +124,112 @@ export default function CameraPage() {
     "Leaf Spot": {
       title: "Leaf Spot",
       description:
-        "Disebabkan oleh *Mycosphaerella fragariae*, menimbulkan bercak ungu di daun dan menghambat fotosintesis.",
+        "Disebabkan oleh 'Mycosphaerella fragariae', menimbulkan bercak ungu di daun dan menghambat fotosintesis.",
       solution:
         "Buang daun terinfeksi. Gunakan fungisida seperti mancozeb. Lakukan rotasi tanaman dan sanitasi rutin.",
     },
-  } as const; 
+  } as const;
 
   useEffect(() => {
     if (Platform.OS !== "web" && !mediaPermission?.granted) {
       requestMediaPermission();
     }
   }, [mediaPermission]);
+
+  // Update useEffect for network monitoring
+  useEffect(() => {
+    const unsubscribe = Network.addEventListener(state => {
+      setIsOnline(state.isConnected ?? false);
+    });
+
+    // Initial network check
+    Network.fetch().then(state => {
+      setIsOnline(state.isConnected ?? false);
+    });
+
+    // Cleanup subscription
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Update model initialization
+  useEffect(() => {
+    const initModel = async () => {
+      try {
+        setModelStatus('loading');
+        const modelLoaderInstance = ModelLoader.getInstance();
+        await modelLoaderInstance.loadModel();
+        setModelStatus('ready');
+        setIsModelReady(true);
+      } catch (error) {
+        console.error('Model initialization failed:', error);
+        setModelStatus('error');
+        Alert.alert(
+          'Error',
+          'Gagal memuat model offline. Mode offline tidak tersedia.'
+        );
+      }
+    };
+
+    initModel();
+  }, []);
+
+  const saveImageToPermanentStorage = async (uri: string): Promise<string> => {
+    try {
+      if (!uri) throw new Error('URI gambar tidak valid');
+
+      const timestamp = Date.now();
+      const filename = `berryware-${timestamp}.jpg`;
+      const permanentUri = `${FileSystem.documentDirectory}${filename}`;
+
+      const sourceExists = await FileSystem.getInfoAsync(uri);
+      if (!sourceExists.exists) {
+        throw new Error('File sumber tidak ditemukan');
+      }
+
+      await FileSystem.copyAsync({
+        from: uri,
+        to: permanentUri,
+      });
+
+      const saved = await FileSystem.getInfoAsync(permanentUri);
+      if (!saved.exists) {
+        throw new Error('Gagal menyimpan file');
+      }
+
+      return permanentUri;
+
+    } catch (error) {
+      console.error('Error saat menyimpan gambar:', error);
+      throw new Error('Gagal menyimpan gambar ke penyimpanan permanen');
+    }
+  };
+
+  const handlePredictionResult = async (
+    result: PredictionResponse, 
+    imageUri: string
+  ): Promise<void> => {
+    try {
+      const permanentUri = await saveImageToPermanentStorage(imageUri);
+
+      const { label, confidence, message } = result.data;
+      if (!label) throw new Error('Hasil prediksi tidak valid');
+
+      router.push({
+        pathname: "/Resultscreen/result",
+        params: {
+          prediction: encodeURIComponent(label),
+          confidence: confidence.toString(),
+          imageUri: encodeURIComponent(permanentUri),
+          message: message || `${confidence}% kemungkinan ${label}`
+        }
+      });
+
+    } catch (error) {
+      throw new Error('Gagal memproses hasil prediksi');
+    }
+  };
 
   const takePicture = async () => {
     if (Platform.OS === "web") {
@@ -102,44 +260,132 @@ export default function CameraPage() {
     }
   };
 
-  const uploadImage = async () => {
-    if (!image) return;
-
-    setIsLoading(true);
-    setPrediction(null);
-
+  // Update the validateImage function
+  const validateImage = async (uri: string) => {
     try {
-      const formData = new FormData();
+      const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
+      console.log('Validating image:', { uri, fileInfo });
 
-      if (Platform.OS === "web") {
-        if (image.startsWith("data:image")) {
-          const response = await fetch(image);
-          const blob = await response.blob();
-          formData.append("file", blob, "image.jpg");
-        }
-      } else {
-        formData.append("file", {
-          uri: image,
-          name: 'image.jpg',
-          type: 'image/jpeg'
-        } as any);
+      if (!fileInfo.exists) {
+        throw new Error('File tidak ditemukan');
       }
 
-      const response = await axios.post(PREDICT_URL, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      if (!('size' in fileInfo) || typeof fileInfo.size !== 'number') {
+        console.warn('Tidak dapat membaca ukuran file');
+        return true; // Proceed with caution
+      }
 
-      setPrediction(response.data.prediction);
-      setShowResult(true);
+      const sizeMB = fileInfo.size / (1024 * 1024);
+      console.log(`File size: ${sizeMB.toFixed(2)} MB`);
+
+      if (sizeMB > 5) {
+        return false; // Needs compression
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Validasi gambar gagal:', error);
+      throw error;
+    }
+  };
+
+  const uploadImage = async (): Promise<void> => {
+    if (!image) {
+      Alert.alert("Error", "Silakan ambil foto terlebih dahulu");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      let processedImage = image;
+      const isValid = await validateImage(image);
+
+      if (!isValid) {
+        processedImage = await compressImage(image, {
+          maxWidth: 1024,
+          maxHeight: 1024,
+          quality: 0.7
+        });
+      }
+
+      if (appMode === 'online' && isOnline) {
+        // Online mode
+        const formData = new FormData();
+        formData.append('image', {
+          uri: processedImage,
+          type: 'image/jpeg',
+          name: 'image.jpg'
+        } as any);
+
+        const response = await axios.post(PREDICT_URL, formData, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'multipart/form-data'
+          },
+          timeout: 15000,
+        });
+
+        if (!response.data?.data?.label) {
+          throw new Error('Format response tidak valid');
+        }
+
+        // Cache prediction for offline use
+        await storePrediction({
+          imageUri: processedImage,
+          prediction: response.data,
+          timestamp: Date.now()
+        });
+
+        await handlePredictionResult(response.data, processedImage);
+      } else {
+        // Offline mode - use ML model locally
+        const prediction = await performLocalPrediction(processedImage);
+        await handlePredictionResult(prediction, processedImage);
+      }
 
     } catch (error) {
-      console.error("Error upload:", error);
-      Alert.alert("Gagal", "Tidak dapat menghubungi server prediksi");
+      console.error('Upload error:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        mode: appMode,
+        isOnline
+      });
+
+      let message = appMode === 'online' && !isOnline 
+        ? 'Tidak ada koneksi internet. Gunakan mode offline?' 
+        : 'Tidak dapat memproses gambar';
+
+      Alert.alert(
+        "Gagal", 
+        message,
+        appMode === 'online' && !isOnline ? [
+          { 
+            text: "Mode Offline", 
+            onPress: () => setAppMode('offline')
+          },
+          { 
+            text: "Coba Lagi", 
+            style: "cancel"
+          }
+        ] : undefined
+      );
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Update performLocalPrediction
+  const performLocalPrediction = async (imageUri: string): Promise<PredictionResponse> => {
+    if (!isModelReady) {
+      throw new Error('Model not ready');
+    }
+
+    const startTime = Date.now();
+    const modelLoaderInstance = ModelLoader.getInstance();
+    const result = await modelLoaderInstance.predict(imageUri);
+    setPredictionTime(Date.now() - startTime);
+
+    return result;
   };
 
   const resetCamera = () => {
@@ -148,45 +394,73 @@ export default function CameraPage() {
     setShowResult(false);
   };
 
+  const renderModeToggle = () => (
+    <TouchableOpacity 
+      style={styles.modeToggle}
+      onPress={() => setAppMode(current => current === 'online' ? 'offline' : 'online')}
+    >
+      <Text style={styles.modeText}>
+        Mode: {appMode === 'online' ? '🌐 Online' : '💾 Offline'}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderModelStatus = () => (
+    <View style={styles.modelStatus}>
+      <Text style={styles.modelStatusText}>
+        Model: {
+          modelStatus === 'loading' ? '⏳ Loading...' :
+          modelStatus === 'ready' ? '✅ Ready' :
+          '❌ Error'
+        }
+      </Text>
+      {predictionTime > 0 && (
+        <Text style={styles.predictionTimeText}>
+          Waktu prediksi: {predictionTime.toFixed(2)}ms
+        </Text>
+      )}
+    </View>
+  );
+
   if (showResult && image && prediction) {
     return (
       <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.resultContainer}>
-        <TouchableOpacity onPress={resetCamera} style={styles.modernBackButton}>
-          <Text style={styles.modernBackArrow}>←</Text>
-        </TouchableOpacity>
+        <ScrollView style={styles.resultContainer}>
+          <TouchableOpacity onPress={resetCamera} style={styles.modernBackButton}>
+            <Text style={styles.modernBackArrow}>←</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.header}>Hasil Deteksi</Text>
+          <Text style={styles.header}>Hasil Deteksi</Text>
 
-        <View style={styles.imageContainer}>
-          <Image 
-            source={{ uri: image }}
-            style={styles.resultImage}
-            resizeMode="cover"
-          />
-        </View>
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: image }}
+              style={styles.resultImage}
+              resizeMode="cover"
+            />
+          </View>
 
-        <View style={styles.card}>
-          <Text style={styles.diseaseTitle}>
-            {diseaseInfo[prediction]?.title || prediction}
-          </Text>
-          <Text style={styles.description}>
-            {diseaseInfo[prediction as keyof typeof diseaseInfo]?.description || 'Deskripsi tidak tersedia.'}
-          </Text>
-          <Text style={styles.solutionHeader}>Solusi:</Text>
-          <Text style={styles.solution}>
-            {diseaseInfo[prediction]?.solution || 'Solusi belum tersedia.'}
-          </Text>
-        </View>
+          <View style={styles.card}>
+            <Text style={styles.diseaseTitle}>
+              {diseaseInfo[prediction]?.title || prediction}
+            </Text>
+            <Text style={styles.description}>
+              {diseaseInfo[prediction as keyof typeof diseaseInfo]?.description || 'Deskripsi tidak tersedia.'}
+            </Text>
+            <Text style={styles.solutionHeader}>Solusi:</Text>
+            <Text style={styles.solution}>
+              {diseaseInfo[prediction]?.solution || 'Solusi belum tersedia.'}
+            </Text>
+          </View>
 
-        <TouchableOpacity 
-          style={[styles.button, styles.newScanButton]} 
-          onPress={resetCamera}
-        >
-          <Text style={styles.text}>Scan Ulang</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </SafeAreaView>
+          <TouchableOpacity
+            style={[styles.button, styles.newScanButton]}
+            onPress={resetCamera}
+          >
+            <Text style={styles.text}>Scan Ulang</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
@@ -266,8 +540,8 @@ export default function CameraPage() {
               <Text style={styles.modernBackArrow}>←</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.flipButton} 
+            <TouchableOpacity
+              style={styles.flipButton}
               onPress={toggleCameraFacing}
             >
               <Text style={styles.flipText}>🔄</Text>
@@ -278,14 +552,17 @@ export default function CameraPage() {
         <Image source={{ uri: image }} style={styles.fullPreview} />
       )}
 
+      {renderModeToggle()}
+      {renderModelStatus()}
+
       <View style={styles.captureButtonContainer}>
         {!image ? (
           <TouchableOpacity onPress={takePicture} style={styles.captureButton} />
         ) : (
           <View style={styles.actionButtonsContainer}>
-            <TouchableOpacity 
-              style={styles.button} 
-              onPress={uploadImage} 
+            <TouchableOpacity
+              style={styles.button}
+              onPress={uploadImage}
               disabled={isLoading}
             >
               {isLoading ? (
@@ -294,8 +571,8 @@ export default function CameraPage() {
                 <Text style={styles.text}>Prediksi</Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.button, styles.secondary]} 
+            <TouchableOpacity
+              style={[styles.button, styles.secondary]}
               onPress={() => setImage(null)}
             >
               <Text style={styles.secondaryText}>Ambil Lagi</Text>
@@ -396,22 +673,22 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   button: {
-    backgroundColor: "#8AA75A", // Changed to green color
+    backgroundColor: "#8AA75A",
     padding: 15,
     borderRadius: 5,
     width: "45%",
     alignItems: "center",
   },
   secondary: {
-    backgroundColor: "#F5F5DC", // Changed to cream color
+    backgroundColor: "#F5F5DC",
   },
   text: {
-    color: "#FFFFFF", // Keep white for primary button
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
   },
-  secondaryText: { // Add new style for secondary button text
-    color: "#6B4F4F", // Brown color for better contrast on cream
+  secondaryText: {
+    color: "#6B4F4F",
     fontSize: 16,
     fontWeight: "bold",
   },
@@ -444,7 +721,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FAF0E6',
   },
-  // INI UNTUK RESULT 
   resultContainer: {
     flex: 1,
     backgroundColor: '#FAF0E6',
@@ -524,7 +800,7 @@ const styles = StyleSheet.create({
     top: 10,
     left: 20,
     zIndex: 10,
-    backgroundColor: '#F5F5DC', // Light cream color
+    backgroundColor: '#F5F5DC',
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 12,
@@ -539,8 +815,44 @@ const styles = StyleSheet.create({
   },
   modernBackArrow: {
     fontSize: 24,
-    color: '#8B0000', // Dark red color
+    color: '#8B0000',
     fontWeight: '600',
-    marginTop: -7, // Adjust arrow position
+    marginTop: -7,
+  },
+  modeToggle: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 8,
+    borderRadius: 8,
+  },
+  modeText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  modelStatus: {
+    position: 'absolute',
+
+    top: 60,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 8,
+    borderRadius: 8,
+  },
+  modelStatusText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  predictionTimeText: {
+    color: '#fff',
+    fontSize: 10,
+    marginTop: 4,
   },
 });
+
+interface PredictionResult {
+  confidence: number;
+  label: string;
+  message: string;
+}

@@ -1,5 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform, Alert, Button, ScrollView, SafeAreaView } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+  Alert,
+  Button,
+  ScrollView,
+  SafeAreaView,
+} from "react-native";
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
 import * as ImagePicker from "expo-image-picker";
@@ -7,10 +19,10 @@ import * as FileSystem from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 import axios from "axios";
 import Webcam from "react-webcam";
-import { PREDICT_URL } from '../config/api';
-import { useRouter } from 'expo-router';
-import * as Network from '@react-native-community/netinfo';
-import ModelLoader from '../../utils/ml/ModelLoader';
+import { PREDICT_URL } from "../config/api";
+import { useRouter } from "expo-router";
+import * as Network from "@react-native-community/netinfo";
+import ModelLoader from "../../utils/ml/modelLoader";
 
 // Define types for API response
 interface PredictionResponse {
@@ -26,7 +38,7 @@ interface FileInfo {
   exists: boolean;
   uri: string;
   isDirectory: boolean;
-  size?: number;  // Make size optional since it's not always available
+  size?: number; // Make size optional since it's not always available
 }
 
 // Add compression options type
@@ -36,8 +48,14 @@ interface CompressionOptions {
   quality: number;
 }
 
+interface CachedPrediction {
+  imageUri: string;
+  prediction: PredictionResponse;
+  timestamp: number;
+}
+
 // Add AppMode type
-type AppMode = 'online' | 'offline';
+type AppMode = "online" | "offline";
 
 // Update the compressImage function to handle optional size
 const compressImage = async (uri: string, options: CompressionOptions) => {
@@ -47,42 +65,100 @@ const compressImage = async (uri: string, options: CompressionOptions) => {
       [{ resize: { width: options.maxWidth, height: options.maxHeight } }],
       { compress: options.quality, format: ImageManipulator.SaveFormat.JPEG }
     );
-    
+
     // Get file info with size parameter
     const fileInfo = await FileSystem.getInfoAsync(result.uri, { size: true });
-    
-    console.log('Compressed image:', {
+
+    console.log("Compressed image:", {
       originalUri: uri,
       compressedUri: result.uri,
-      size: fileInfo.exists && 'size' in fileInfo ? fileInfo.size : 'unknown'
+      size: fileInfo.exists && "size" in fileInfo ? fileInfo.size : "unknown",
     });
-    
+
     return result.uri;
   } catch (error) {
-    console.error('Kompresi gambar gagal:', error);
+    console.error("Kompresi gambar gagal:", error);
     throw error;
+  }
+};
+
+const storePrediction = async (
+  predictionData: CachedPrediction
+): Promise<void> => {
+  try {
+    const cacheDir = `${FileSystem.documentDirectory}predictions/`;
+    const dirInfo = await FileSystem.getInfoAsync(cacheDir);
+
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
+    }
+    const filename = `prediction_${predictionData.timestamp}.json`;
+    const filePath = `${cacheDir}${filename}`;
+
+    await FileSystem.writeAsStringAsync(
+      filePath,
+      JSON.stringify(predictionData),
+      { encoding: FileSystem.EncodingType.UTF8 }
+    );
+
+    console.log("Prediction cached successfully:", filePath);
+  } catch (error) {
+    console.error("Failed to cache prediction:", error);
+  }
+};
+
+const getCachedPredictions = async (): Promise<CachedPrediction[]> => {
+  try {
+    const cacheDir = `${FileSystem.documentDirectory}predictions/`;
+    const dirInfo = await FileSystem.getInfoAsync(cacheDir);
+
+    if (!dirInfo.exists) {
+      return [];
+    }
+
+    const files = await FileSystem.readDirectoryAsync(cacheDir);
+    const predictions: CachedPrediction[] = [];
+
+    for (const file of files) {
+      if (file.endsWith(".json")) {
+        const filePath = `${cacheDir}${file}`;
+        const content = await FileSystem.readAsStringAsync(filePath);
+        const prediction = JSON.parse(content) as CachedPrediction;
+        predictions.push(prediction);
+      }
+    }
+
+    return predictions.sort((a, b) => b.timestamp - a.timestamp);
+  } catch (error) {
+    console.error("Failed to get cached predictions:", error);
+    return [];
   }
 };
 
 export default function CameraPage() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
-  const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
+  const [mediaPermission, requestMediaPermission] =
+    MediaLibrary.usePermissions();
 
   const [cameraRef, setCameraRef] = useState<any>(null);
   const [image, setImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [prediction, setPrediction] = useState<keyof typeof diseaseInfo | null>(null);
+  const [prediction, setPrediction] = useState<keyof typeof diseaseInfo | null>(
+    null
+  );
   const webcamRef = useRef<Webcam>(null);
   const [facing, setFacing] = useState<CameraType>("back");
   const [cameraHeight, setCameraHeight] = useState<number>(0);
   const [showResult, setShowResult] = useState(false);
-  const [appMode, setAppMode] = useState<AppMode>('online');
+  const [appMode, setAppMode] = useState<AppMode>("online");
   const [isOnline, setIsOnline] = useState(true);
   const [isModelReady, setIsModelReady] = useState(false);
 
   // Add new states
-  const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [modelStatus, setModelStatus] = useState<"loading" | "ready" | "error">(
+    "loading"
+  );
   const [predictionTime, setPredictionTime] = useState<number>(0);
 
   const diseaseInfo = {
@@ -138,12 +214,12 @@ export default function CameraPage() {
 
   // Update useEffect for network monitoring
   useEffect(() => {
-    const unsubscribe = Network.addEventListener(state => {
+    const unsubscribe = Network.addEventListener((state) => {
       setIsOnline(state.isConnected ?? false);
     });
 
     // Initial network check
-    Network.fetch().then(state => {
+    Network.fetch().then((state) => {
       setIsOnline(state.isConnected ?? false);
     });
 
@@ -157,17 +233,17 @@ export default function CameraPage() {
   useEffect(() => {
     const initModel = async () => {
       try {
-        setModelStatus('loading');
+        setModelStatus("loading");
         const modelLoaderInstance = ModelLoader.getInstance();
         await modelLoaderInstance.loadModel();
-        setModelStatus('ready');
+        setModelStatus("ready");
         setIsModelReady(true);
       } catch (error) {
-        console.error('Model initialization failed:', error);
-        setModelStatus('error');
+        console.error("Model initialization failed:", error);
+        setModelStatus("error");
         Alert.alert(
-          'Error',
-          'Gagal memuat model offline. Mode offline tidak tersedia.'
+          "Error",
+          "Gagal memuat model offline. Mode offline tidak tersedia."
         );
       }
     };
@@ -177,7 +253,7 @@ export default function CameraPage() {
 
   const saveImageToPermanentStorage = async (uri: string): Promise<string> => {
     try {
-      if (!uri) throw new Error('URI gambar tidak valid');
+      if (!uri) throw new Error("URI gambar tidak valid");
 
       const timestamp = Date.now();
       const filename = `berryware-${timestamp}.jpg`;
@@ -185,7 +261,7 @@ export default function CameraPage() {
 
       const sourceExists = await FileSystem.getInfoAsync(uri);
       if (!sourceExists.exists) {
-        throw new Error('File sumber tidak ditemukan');
+        throw new Error("File sumber tidak ditemukan");
       }
 
       await FileSystem.copyAsync({
@@ -195,26 +271,25 @@ export default function CameraPage() {
 
       const saved = await FileSystem.getInfoAsync(permanentUri);
       if (!saved.exists) {
-        throw new Error('Gagal menyimpan file');
+        throw new Error("Gagal menyimpan file");
       }
 
       return permanentUri;
-
     } catch (error) {
-      console.error('Error saat menyimpan gambar:', error);
-      throw new Error('Gagal menyimpan gambar ke penyimpanan permanen');
+      console.error("Error saat menyimpan gambar:", error);
+      throw new Error("Gagal menyimpan gambar ke penyimpanan permanen");
     }
   };
 
   const handlePredictionResult = async (
-    result: PredictionResponse, 
+    result: PredictionResponse,
     imageUri: string
   ): Promise<void> => {
     try {
       const permanentUri = await saveImageToPermanentStorage(imageUri);
 
       const { label, confidence, message } = result.data;
-      if (!label) throw new Error('Hasil prediksi tidak valid');
+      if (!label) throw new Error("Hasil prediksi tidak valid");
 
       router.push({
         pathname: "/Resultscreen/result",
@@ -222,12 +297,11 @@ export default function CameraPage() {
           prediction: encodeURIComponent(label),
           confidence: confidence.toString(),
           imageUri: encodeURIComponent(permanentUri),
-          message: message || `${confidence}% kemungkinan ${label}`
-        }
+          message: message || `${confidence}% kemungkinan ${label}`,
+        },
       });
-
     } catch (error) {
-      throw new Error('Gagal memproses hasil prediksi');
+      throw new Error("Gagal memproses hasil prediksi");
     }
   };
 
@@ -264,14 +338,14 @@ export default function CameraPage() {
   const validateImage = async (uri: string) => {
     try {
       const fileInfo = await FileSystem.getInfoAsync(uri, { size: true });
-      console.log('Validating image:', { uri, fileInfo });
+      console.log("Validating image:", { uri, fileInfo });
 
       if (!fileInfo.exists) {
-        throw new Error('File tidak ditemukan');
+        throw new Error("File tidak ditemukan");
       }
 
-      if (!('size' in fileInfo) || typeof fileInfo.size !== 'number') {
-        console.warn('Tidak dapat membaca ukuran file');
+      if (!("size" in fileInfo) || typeof fileInfo.size !== "number") {
+        console.warn("Tidak dapat membaca ukuran file");
         return true; // Proceed with caution
       }
 
@@ -284,7 +358,7 @@ export default function CameraPage() {
 
       return true;
     } catch (error) {
-      console.error('Validasi gambar gagal:', error);
+      console.error("Validasi gambar gagal:", error);
       throw error;
     }
   };
@@ -305,37 +379,39 @@ export default function CameraPage() {
         processedImage = await compressImage(image, {
           maxWidth: 1024,
           maxHeight: 1024,
-          quality: 0.7
+          quality: 0.7,
         });
       }
 
-      if (appMode === 'online' && isOnline) {
+      if (appMode === "online" && isOnline) {
         // Online mode
         const formData = new FormData();
-        formData.append('image', {
+        formData.append("image", {
           uri: processedImage,
-          type: 'image/jpeg',
-          name: 'image.jpg'
+          type: "image/jpeg",
+          name: "image.jpg",
         } as any);
 
         const response = await axios.post(PREDICT_URL, formData, {
           headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'multipart/form-data'
+            Accept: "application/json",
+            "Content-Type": "multipart/form-data",
           },
           timeout: 15000,
         });
 
         if (!response.data?.data?.label) {
-          throw new Error('Format response tidak valid');
+          throw new Error("Format response tidak valid");
         }
 
         // Cache prediction for offline use
-        await storePrediction({
-          imageUri: processedImage,
-          prediction: response.data,
-          timestamp: Date.now()
-        });
+        // await storePrediction({
+        //   imageUri: processedImage,
+        //   prediction: response.data,
+        //   timestamp: Date.now()
+        // });
+
+        await handlePredictionResult(response.data, processedImage);
 
         await handlePredictionResult(response.data, processedImage);
       } else {
@@ -343,31 +419,33 @@ export default function CameraPage() {
         const prediction = await performLocalPrediction(processedImage);
         await handlePredictionResult(prediction, processedImage);
       }
-
     } catch (error) {
-      console.error('Upload error:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
+      console.error("Upload error:", {
+        message: error instanceof Error ? error.message : "Unknown error",
         mode: appMode,
-        isOnline
+        isOnline,
       });
 
-      let message = appMode === 'online' && !isOnline 
-        ? 'Tidak ada koneksi internet. Gunakan mode offline?' 
-        : 'Tidak dapat memproses gambar';
+      let message =
+        appMode === "online" && !isOnline
+          ? "Tidak ada koneksi internet. Gunakan mode offline?"
+          : "Tidak dapat memproses gambar";
 
       Alert.alert(
-        "Gagal", 
+        "Gagal",
         message,
-        appMode === 'online' && !isOnline ? [
-          { 
-            text: "Mode Offline", 
-            onPress: () => setAppMode('offline')
-          },
-          { 
-            text: "Coba Lagi", 
-            style: "cancel"
-          }
-        ] : undefined
+        appMode === "online" && !isOnline
+          ? [
+              {
+                text: "Mode Offline",
+                onPress: () => setAppMode("offline"),
+              },
+              {
+                text: "Coba Lagi",
+                style: "cancel",
+              },
+            ]
+          : undefined
       );
     } finally {
       setIsLoading(false);
@@ -375,9 +453,11 @@ export default function CameraPage() {
   };
 
   // Update performLocalPrediction
-  const performLocalPrediction = async (imageUri: string): Promise<PredictionResponse> => {
+  const performLocalPrediction = async (
+    imageUri: string
+  ): Promise<PredictionResponse> => {
     if (!isModelReady) {
-      throw new Error('Model not ready');
+      throw new Error("Model not ready");
     }
 
     const startTime = Date.now();
@@ -395,12 +475,14 @@ export default function CameraPage() {
   };
 
   const renderModeToggle = () => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.modeToggle}
-      onPress={() => setAppMode(current => current === 'online' ? 'offline' : 'online')}
+      onPress={() =>
+        setAppMode((current) => (current === "online" ? "offline" : "online"))
+      }
     >
       <Text style={styles.modeText}>
-        Mode: {appMode === 'online' ? '🌐 Online' : '💾 Offline'}
+        Mode: {appMode === "online" ? "🌐 Online" : "💾 Offline"}
       </Text>
     </TouchableOpacity>
   );
@@ -408,11 +490,12 @@ export default function CameraPage() {
   const renderModelStatus = () => (
     <View style={styles.modelStatus}>
       <Text style={styles.modelStatusText}>
-        Model: {
-          modelStatus === 'loading' ? '⏳ Loading...' :
-          modelStatus === 'ready' ? '✅ Ready' :
-          '❌ Error'
-        }
+        Model:{" "}
+        {modelStatus === "loading"
+          ? "⏳ Loading..."
+          : modelStatus === "ready"
+          ? "✅ Ready"
+          : "❌ Error"}
       </Text>
       {predictionTime > 0 && (
         <Text style={styles.predictionTimeText}>
@@ -426,7 +509,10 @@ export default function CameraPage() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.resultContainer}>
-          <TouchableOpacity onPress={resetCamera} style={styles.modernBackButton}>
+          <TouchableOpacity
+            onPress={resetCamera}
+            style={styles.modernBackButton}
+          >
             <Text style={styles.modernBackArrow}>←</Text>
           </TouchableOpacity>
 
@@ -445,11 +531,12 @@ export default function CameraPage() {
               {diseaseInfo[prediction]?.title || prediction}
             </Text>
             <Text style={styles.description}>
-              {diseaseInfo[prediction as keyof typeof diseaseInfo]?.description || 'Deskripsi tidak tersedia.'}
+              {diseaseInfo[prediction as keyof typeof diseaseInfo]
+                ?.description || "Deskripsi tidak tersedia."}
             </Text>
             <Text style={styles.solutionHeader}>Solusi:</Text>
             <Text style={styles.solution}>
-              {diseaseInfo[prediction]?.solution || 'Solusi belum tersedia.'}
+              {diseaseInfo[prediction]?.solution || "Solusi belum tersedia."}
             </Text>
           </View>
 
@@ -471,7 +558,16 @@ export default function CameraPage() {
   if (Platform.OS === "web") {
     return (
       <View style={styles.container}>
-        {!image ? <Webcam ref={webcamRef} audio={false} screenshotFormat="image/jpeg" style={styles.camera} /> : <Image source={{ uri: image }} style={styles.preview} />}
+        {!image ? (
+          <Webcam
+            ref={webcamRef}
+            audio={false}
+            screenshotFormat="image/jpeg"
+            style={styles.camera}
+          />
+        ) : (
+          <Image source={{ uri: image }} style={styles.preview} />
+        )}
 
         <View style={styles.predictionContainer}>
           {prediction && (
@@ -485,10 +581,21 @@ export default function CameraPage() {
         <View style={styles.buttonContainer}>
           {image ? (
             <>
-              <TouchableOpacity style={styles.button} onPress={uploadImage} disabled={isLoading}>
-                {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.text}>Prediksi</Text>}
+              <TouchableOpacity
+                style={styles.button}
+                onPress={uploadImage}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.text}>Prediksi</Text>
+                )}
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.secondary]} onPress={() => setImage(null)}>
+              <TouchableOpacity
+                style={[styles.button, styles.secondary]}
+                onPress={() => setImage(null)}
+              >
                 <Text style={styles.secondaryText}>Ambil Lagi</Text>
               </TouchableOpacity>
             </>
@@ -497,7 +604,10 @@ export default function CameraPage() {
               <TouchableOpacity style={styles.button} onPress={takePicture}>
                 <Text style={styles.text}>Ambil Foto</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.secondary]} onPress={pickImage}>
+              <TouchableOpacity
+                style={[styles.button, styles.secondary]}
+                onPress={pickImage}
+              >
                 <Text style={styles.secondaryText}>Pilih dari Galeri</Text>
               </TouchableOpacity>
             </>
@@ -518,7 +628,9 @@ export default function CameraPage() {
   if (!permission.granted) {
     return (
       <View style={styles.centeredContainer}>
-        <Text style={styles.message}>Kami membutuhkan izin untuk mengakses kamera</Text>
+        <Text style={styles.message}>
+          Kami membutuhkan izin untuk mengakses kamera
+        </Text>
         <Button onPress={requestPermission} title="Berikan Izin" />
       </View>
     );
@@ -557,7 +669,10 @@ export default function CameraPage() {
 
       <View style={styles.captureButtonContainer}>
         {!image ? (
-          <TouchableOpacity onPress={takePicture} style={styles.captureButton} />
+          <TouchableOpacity
+            onPress={takePicture}
+            style={styles.captureButton}
+          />
         ) : (
           <View style={styles.actionButtonsContainer}>
             <TouchableOpacity
@@ -587,12 +702,12 @@ export default function CameraPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'black',
+    backgroundColor: "black",
   },
   backArrow: {
     fontSize: 24,
-    color: '#8B0000',
-    fontWeight: 'bold',
+    color: "#8B0000",
+    fontWeight: "bold",
   },
   centeredContainer: {
     flex: 1,
@@ -614,54 +729,54 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     flex: 1,
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   fullCamera: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
   },
   fullPreview: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    resizeMode: 'cover',
+    resizeMode: "cover",
   },
   flipButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 40,
     right: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     padding: 12,
     borderRadius: 25,
     width: 50,
     height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   captureButtonContainer: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 40,
-    width: '100%',
-    alignItems: 'center',
+    width: "100%",
+    alignItems: "center",
   },
   captureButton: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: "rgba(255,255,255,0.3)",
     borderWidth: 4,
-    borderColor: 'white',
+    borderColor: "white",
   },
   actionButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
     paddingHorizontal: 20,
   },
   buttonContainer: {
@@ -719,29 +834,29 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    backgroundColor: '#FAF0E6',
+    backgroundColor: "#FAF0E6",
   },
   resultContainer: {
     flex: 1,
-    backgroundColor: '#FAF0E6',
+    backgroundColor: "#FAF0E6",
     padding: 20,
   },
   header: {
     fontSize: 26,
-    fontWeight: 'bold',
-    color: '#8B0000',
-    textAlign: 'center',
+    fontWeight: "bold",
+    color: "#8B0000",
+    textAlign: "center",
     marginVertical: 10,
   },
   imageContainer: {
     padding: 2,
     borderRadius: 25,
     borderWidth: 2,
-    borderColor: '#8B0000',
-    overflow: 'hidden',
+    borderColor: "#8B0000",
+    overflow: "hidden",
     marginVertical: 20,
-    backgroundColor: 'white',
-    shadowColor: '#000',
+    backgroundColor: "white",
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -752,24 +867,24 @@ const styles = StyleSheet.create({
     minHeight: 300,
   },
   resultImage: {
-    width: '100%',
+    width: "100%",
     height: 300,
     borderRadius: 23,
   },
   card: {
-    backgroundColor: '#F5F5DC',
+    backgroundColor: "#F5F5DC",
     borderRadius: 15,
     padding: 20,
     elevation: 4,
     marginBottom: 20,
   },
   diseaseTitle: {
-    backgroundColor: '#A9C57D',
+    backgroundColor: "#A9C57D",
     padding: 10,
     borderRadius: 10,
     fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
     marginBottom: 15,
   },
   description: {
@@ -779,7 +894,7 @@ const styles = StyleSheet.create({
   },
   solutionHeader: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginTop: 10,
     marginBottom: 5,
   },
@@ -788,23 +903,23 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   newScanButton: {
-    backgroundColor: '#8AA75A',
+    backgroundColor: "#8AA75A",
     marginTop: 20,
     marginBottom: 30,
-    width: '100%',
+    width: "100%",
   },
   modernBackButton: {
-    position: 'absolute',
+    position: "absolute",
     width: 40,
     height: 40,
     top: 10,
     left: 20,
     zIndex: 10,
-    backgroundColor: '#F5F5DC',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#F5F5DC",
+    justifyContent: "center",
+    alignItems: "center",
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -815,37 +930,37 @@ const styles = StyleSheet.create({
   },
   modernBackArrow: {
     fontSize: 24,
-    color: '#8B0000',
-    fontWeight: '600',
+    color: "#8B0000",
+    fontWeight: "600",
     marginTop: -7,
   },
   modeToggle: {
-    position: 'absolute',
+    position: "absolute",
     top: 10,
     right: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     padding: 8,
     borderRadius: 8,
   },
   modeText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
   },
   modelStatus: {
-    position: 'absolute',
+    position: "absolute",
 
     top: 60,
     right: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     padding: 8,
     borderRadius: 8,
   },
   modelStatusText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
   },
   predictionTimeText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 10,
     marginTop: 4,
   },

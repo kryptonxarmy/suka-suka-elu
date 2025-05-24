@@ -1,6 +1,6 @@
-import * as tf from '@tensorflow/tfjs';
-import '@tensorflow/tfjs-react-native';
-import { bundleResourceIO } from '@tensorflow/tfjs-react-native';
+import * as tf from "@tensorflow/tfjs";
+import "@tensorflow/tfjs-react-native";
+import { bundleResourceIO } from "@tensorflow/tfjs-react-native";
 
 export class ModelLoader {
   private static instance: ModelLoader | null = null;
@@ -8,12 +8,12 @@ export class ModelLoader {
   private isInitialized = false;
 
   private readonly labels = [
-    'Powdery Mildew',
-    'Blossom Blight',
-    'Angular Leaf Spot',
-    'Gray Mold',
-    'Calcium Deficiency',
-    'Leaf Spot'
+    "Powdery Mildew",
+    "Blossom Blight",
+    "Angular Leaf Spot",
+    "Gray Mold",
+    "Calcium Deficiency",
+    "Leaf Spot",
   ];
 
   private constructor() {}
@@ -30,16 +30,18 @@ export class ModelLoader {
 
     try {
       await tf.ready();
-      console.log('TensorFlow.js ready');
+      console.log("TensorFlow.js ready");
 
-      const modelJson = require('../../assets/model/model.json');
-      const modelWeights = require('../../assets/model/weights.bin');
+      const modelJson = require("../../assets/model/model.json");
+      const modelWeights = require("../../assets/model/weights.bin");
 
-      this.model = await tf.loadLayersModel(bundleResourceIO(modelJson, modelWeights));
+      this.model = await tf.loadLayersModel(
+        bundleResourceIO(modelJson, modelWeights)
+      );
       this.isInitialized = true;
-      console.log('Model loaded successfully');
+      console.log("Model loaded successfully");
     } catch (error) {
-      console.error('Failed to load model:', error);
+      console.error("Failed to load model:", error);
       throw error;
     }
   }
@@ -49,10 +51,10 @@ export class ModelLoader {
       label: string;
       confidence: number;
       message: string;
-    }
+    };
   }> {
     if (!this.model || !this.isInitialized) {
-      throw new Error('Model not initialized');
+      throw new Error("Model not initialized");
     }
 
     try {
@@ -65,12 +67,16 @@ export class ModelLoader {
         data: {
           label: this.labels[randomIndex],
           confidence,
-          message: `${confidence.toFixed(1)}% kemungkinan ${this.labels[randomIndex]}`
-        }
+          message: `${confidence.toFixed(1)}% kemungkinan ${
+            this.labels[randomIndex]
+          }`,
+        },
       };
     } catch (error) {
-      console.error('Prediction failed:', error);
+      console.error("Prediction failed:", error);
       throw error;
     }
   }
 }
+
+export default ModelLoader;

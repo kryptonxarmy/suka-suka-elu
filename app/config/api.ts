@@ -1,5 +1,5 @@
 export const API_CONFIG = {
-  baseUrl: 'http://192.168.53.97:8000',
+  baseUrl: 'http://4.195.16.233:8000',
   endpoints: {
     predict: '/predict'
   }

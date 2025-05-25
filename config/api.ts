@@ -1,5 +1,5 @@
 export const API_CONFIG = {
-  development: 'http://127.0.0.1:8000',  // Your development IP
+  development: 'http://4.195.16.233:8000',  // Your development IP
   production: 'YOUR_PRODUCTION_URL',          // Production URL (when ready)
 };
 

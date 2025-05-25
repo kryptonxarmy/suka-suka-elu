@@ -16,14 +16,17 @@
       "**/*"
     ],
     "newArchEnabled": true,
+    "jsEngine": "hermes",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "jsEngine": "hermes"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/ada/imagesptiv/imagese-ic/imageson.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "jsEngine": "hermes"
     },
     "web": {
       "bundler": "metro",

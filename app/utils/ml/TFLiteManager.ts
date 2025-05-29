@@ -3,6 +3,14 @@ import '@tensorflow/tfjs-react-native';
 import * as FileSystem from 'expo-file-system';
 import { bundleResourceIO, decodeJpeg } from '@tensorflow/tfjs-react-native';
 
+interface PredictionResponse {
+  data: {
+    label: string;
+    confidence: number;
+    message: string;
+  };
+}
+
 export class TFLiteManager {
   private static instance: TFLiteManager;
   private model: tf.GraphModel | null = null;
@@ -38,27 +46,36 @@ export class TFLiteManager {
 
   private async preprocessImage(uri: string): Promise<tf.Tensor3D> {
     try {
-      // Baca file gambar
       const imgB64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      
-      // Decode image
+
       const imgBuffer = tf.util.encodeString(imgB64, 'base64').buffer;
       const raw = new Uint8Array(imgBuffer);
-      const imageTensor = decodeJpeg(raw);
 
-      // Resize ke 224x224 (sesuaikan dengan input model)
+      // Pastikan hasil decodeJpeg adalah RGB (3 channel)
+      let imageTensor = decodeJpeg(raw, 3); // gunakan let karena bisa di-reassign
+
+      // Jika ternyata tensor bukan 3D, coba perbaiki (misal grayscale)
+      if (imageTensor.rank !== 3) {
+        if (imageTensor.rank === 2) {
+          const expanded = imageTensor.expandDims(2);
+          const rgbTensor = expanded.tile([1, 1, 3]);
+          imageTensor.dispose();
+          imageTensor = rgbTensor as tf.Tensor3D;
+        } else {
+          throw new Error(`Gambar tidak memiliki 2 atau 3 dimensi. Rank: ${imageTensor.rank}`);
+        }
+      }
+
       const resized = tf.image.resizeBilinear(imageTensor, [224, 224]);
-      
-      // Normalisasi nilai pixel
       const normalized = resized.div(255.0);
-      
-      // Cleanup
+
       imageTensor.dispose();
       resized.dispose();
 
-      return normalized;
+      // Type assertion agar TypeScript yakin ini Tensor3D
+      return normalized as tf.Tensor3D;
     } catch (error) {
       console.error('Preprocessing gambar gagal:', error);
       throw error;
@@ -111,5 +128,11 @@ export class TFLiteManager {
       console.error('Prediksi gagal:', error);
       throw error;
     }
+  }
+
+  async runModelOnImage(imagePath: string) {
+    await this.loadModel();
+    const result = await this.predict(imagePath);
+    return result;
   }
 }

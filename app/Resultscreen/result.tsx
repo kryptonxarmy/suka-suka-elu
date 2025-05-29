@@ -1,19 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
   ActivityIndicator,
   Alert,
-  Image
+  Image,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
-import { MaterialIcons } from '@expo/vector-icons'; // Add this import
-import { PREDICT_URL } from '../config/api'; // Import specific API configuration
+import { MaterialIcons } from '@expo/vector-icons';
+import { PREDICT_URL } from '../config/api';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Define disease types first
 type DiseaseType = 
@@ -135,43 +142,51 @@ const checkFileAccess = async (uri: string) => {
   }
 };
 
-const ImageWithFallback = ({ uri }: { uri: string }) => {
+const ImageWithFallback = ({
+  uri,
+  onReload,
+}: {
+  uri: string;
+  onReload: () => void;
+}) => {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Sederhanakan proses loading gambar
-  const loadImage = async () => {
-    try {
-      setIsLoading(true);
-      setHasError(false);
-
-      // Validasi URI dasar
-      if (!uri) {
-        throw new Error('URI tidak valid');
-      }
-
-      // Cek apakah file ada (untuk URI lokal)
-      if (uri.startsWith('file://') || uri.startsWith('content://')) {
+  // Untuk optimasi, gunakan useCallback agar tidak membuat ulang fungsi tanpa perlu
+  const attemptLoadImage = useCallback(async () => {
+    setIsLoading(true);
+    setHasError(false);
+    if (!uri) {
+      setHasError(true);
+      setIsLoading(false);
+      return;
+    }
+    if (uri.startsWith('file://') || uri.startsWith('content://')) {
+      try {
         const fileInfo = await FileSystem.getInfoAsync(uri);
         if (!fileInfo.exists) {
-          throw new Error('File tidak ditemukan');
+          setHasError(true);
+          setIsLoading(false);
+          return;
         }
+      } catch (error) {
+        setHasError(true);
+        setIsLoading(false);
+        return;
       }
-
-      // Reset error state jika berhasil
-      setHasError(false);
-    } catch (error) {
-      console.error('Error loading image:', error);
-      setHasError(true);
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  // Load gambar saat komponen mount atau URI berubah
-  useEffect(() => {
-    loadImage();
   }, [uri]);
+
+  useEffect(() => {
+    attemptLoadImage();
+  }, [attemptLoadImage]);
+
+  // Handler reload dari ikon
+  const handleReloadPress = () => {
+    setHasError(false);
+    setIsLoading(true);
+    onReload();
+  };
 
   if (isLoading) {
     return (
@@ -182,16 +197,13 @@ const ImageWithFallback = ({ uri }: { uri: string }) => {
     );
   }
 
-  if (hasError) {
+  if (hasError || !uri) {
     return (
-      <View style={styles.errorContainer}>
+      <View style={styles.errorContainerImage}>
+        <MaterialIcons name="broken-image" size={48} color="#8B0000" />
         <Text style={styles.errorText}>Gagal memuat gambar</Text>
-        <TouchableOpacity 
-          style={styles.reloadButton}
-          onPress={loadImage}
-        >
-          <MaterialIcons name="refresh" size={24} color="#8B0000" />
-          <Text style={styles.reloadText}>Coba Lagi</Text>
+        <TouchableOpacity style={styles.reloadIconContainer} onPress={handleReloadPress}>
+          <MaterialIcons name="refresh" size={28} color="#8B0000" />
         </TouchableOpacity>
       </View>
     );
@@ -199,19 +211,28 @@ const ImageWithFallback = ({ uri }: { uri: string }) => {
 
   return (
     <View style={styles.imageWrapper}>
-      <Image 
+      <Image
+        key={uri}
         source={{ uri }}
         style={styles.image}
-        resizeMode="contain"
-        onError={() => setHasError(true)}
+        resizeMode="cover"
+        onLoadStart={() => {
+          setIsLoading(true);
+          setHasError(false);
+        }}
+        onLoadEnd={() => setIsLoading(false)}
+        onLoad={() => setIsLoading(false)}
+        onError={() => {
+          setHasError(true);
+          setIsLoading(false);
+        }}
       />
-      <TouchableOpacity 
-        style={styles.reloadButton}
-        onPress={loadImage}
-      >
-        <MaterialIcons name="refresh" size={24} color="#8B0000" />
-        <Text style={styles.reloadText}>Muat Ulang</Text>
-      </TouchableOpacity>
+      {/* Tombol reload hanya muncul jika tidak loading */}
+      {!isLoading && (
+        <TouchableOpacity style={styles.reloadIconContainer} onPress={handleReloadPress}>
+          <MaterialIcons name="refresh" size={28} color="#8B0000" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -229,8 +250,11 @@ export default function ResultScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
-  
-  // State untuk menyimpan data
+
+  // Tambahkan state untuk reload key
+  const [imageReloadKey, setImageReloadKey] = useState(0);
+
+  // State untuk data
   const [prediction, setPrediction] = useState<DiseaseType | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(0);
@@ -240,51 +264,35 @@ export default function ResultScreen() {
     solution: string;
   } | null>(null);
 
+  // Expand/collapse state
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(true);
+  const [isSolutionExpanded, setIsSolutionExpanded] = useState(true);
+
+  // Fungsi reload image
+  const handleImageReload = () => {
+    setImageReloadKey((prev) => prev + 1);
+  };
+
   // Ambil dan proses data saat komponen mount
   useEffect(() => {
     const processImage = async () => {
       try {
-        // Debug logs
-        console.log('Debug params:', {
-          prediction: params.prediction,
-          imageUri: params.imageUri,
-          decodedUri: params.imageUri ? decodeURIComponent(params.imageUri as string) : null,
-          confidence: params.confidence
-        });
-
-        // Validasi params
         if (!params.imageUri) {
           throw new Error('URI gambar tidak ditemukan');
         }
-
-        // Decode URI dengan aman
         const decodedUri = safeDecode(params.imageUri as string);
-        
-        // Debug file info
-        const fileInfo = await FileSystem.getInfoAsync(decodedUri);
-        console.log('File info:', {
-          uri: decodedUri,
-          exists: fileInfo.exists,
-          isDirectory: fileInfo.isDirectory,
-          ...(fileInfo.exists && 'size' in fileInfo ? { size: fileInfo.size } : {})
-        });
-
-        // Set imageUri dan tampilkan gambar sederhana untuk testing
         setImageUri(decodedUri);
 
-        // Validasi params lainnya
         if (!params.prediction || !params.confidence) {
           Alert.alert('Data Tidak Lengkap', 'Hasil deteksi tidak dapat ditampilkan.');
           router.back();
           return;
         }
 
-        // Decode dengan aman
         const decodedPrediction = safeDecode(params.prediction as string);
-        
-        // Normalize prediction to match diseaseInfo keys
-        const predictedKey = Object.keys(diseaseInfo).find(
-          key => key.toLowerCase() === decodedPrediction.toLowerCase()
+        const diseaseKeys = Object.keys(diseaseInfo);
+        const predictedKey = diseaseKeys.find(
+          key => key.toLowerCase().trim() === decodedPrediction.toLowerCase().trim()
         );
 
         if (predictedKey) {
@@ -298,17 +306,12 @@ export default function ResultScreen() {
           });
         }
 
-        // Set data dengan validasi
         const confidenceValue = Number(params.confidence);
         setConfidence(isNaN(confidenceValue) ? 0 : confidenceValue);
 
       } catch (error) {
-        console.error('Error detail:', {
-          message: error instanceof Error ? error.message : 'Unknown error',
-          params: params
-        });
         Alert.alert(
-          'Gagal', 
+          'Gagal',
           'Tidak dapat memproses gambar. Silakan coba lagi.'
         );
         router.back();
@@ -353,6 +356,16 @@ export default function ResultScreen() {
     );
   };
 
+  // Toggle handlers with animation
+  const toggleDescription = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsDescriptionExpanded(expanded => !expanded);
+  };
+  const toggleSolution = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsSolutionExpanded(expanded => !expanded);
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -367,22 +380,23 @@ export default function ResultScreen() {
       <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
         <Text style={styles.backArrow}>←</Text>
       </TouchableOpacity>
-      
+
       <Text style={styles.header}>Hasil Deteksi Penyakit</Text>
-      
-      {/* Add debug view */}
-      {__DEV__ && renderSimpleImage()}
 
       <View style={styles.imageContainer}>
         {imageUri ? (
-          <ImageWithFallback uri={imageUri} />
+          <ImageWithFallback
+            key={`image-${imageReloadKey}`}
+            uri={imageUri}
+            onReload={handleImageReload}
+          />
         ) : (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>Gambar tidak tersedia</Text>
           </View>
         )}
       </View>
-      
+
       <View style={styles.card}>
         <View style={styles.resultHeader}>
           <Text style={styles.diseaseTitle}>
@@ -395,15 +409,39 @@ export default function ResultScreen() {
         </View>
 
         <View style={styles.detailContainer}>
-          <Text style={styles.detailLabel}>Keterangan Penyakit:</Text>
-          <Text style={styles.description}>
-            {diseaseData?.description || 'Informasi tidak tersedia'}
-          </Text>
-          
-          <Text style={styles.solutionHeader}>Solusi Penanganan:</Text>
-          <Text style={styles.solution}>
-            {diseaseData?.solution || 'Solusi tidak tersedia'}
-          </Text>
+          {/* Keterangan Penyakit */}
+          <TouchableOpacity style={styles.collapsibleHeader} onPress={toggleDescription} activeOpacity={0.7}>
+            <Text style={styles.detailLabel} numberOfLines={1}>
+              Keterangan Penyakit:
+            </Text>
+            <MaterialIcons
+              name={isDescriptionExpanded ? 'expand-less' : 'expand-more'}
+              size={24}
+              color="#8B0000"
+            />
+          </TouchableOpacity>
+          {isDescriptionExpanded && (
+            <Text style={styles.description}>
+              {diseaseData?.description || 'Informasi tidak tersedia'}
+            </Text>
+          )}
+
+          {/* Solusi Penanganan */}
+          <TouchableOpacity style={[styles.collapsibleHeader, styles.solutionHeaderContainer]} onPress={toggleSolution} activeOpacity={0.7}>
+            <Text style={styles.solutionHeaderLabel} numberOfLines={1}>
+              Solusi Penanganan:
+            </Text>
+            <MaterialIcons
+              name={isSolutionExpanded ? 'expand-less' : 'expand-more'}
+              size={24}
+              color="#8B0000"
+            />
+          </TouchableOpacity>
+          {isSolutionExpanded && (
+            <Text style={styles.solution}>
+              {diseaseData?.solution || 'Solusi tidak tersedia'}
+            </Text>
+          )}
         </View>
       </View>
     </ScrollView>
@@ -486,21 +524,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  reloadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#8B0000',
-  },
-  reloadText: {
-    color: '#8B0000',
-    fontSize: 16,
-    marginLeft: 8,
-  },
   card: {
     backgroundColor: '#F5F5DC',
     borderRadius: 15,
@@ -551,11 +574,28 @@ const styles = StyleSheet.create({
     marginTop: 15,
     elevation: 1,
   },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+    marginBottom: 2,
+  },
   detailLabel: {
     fontSize: 16,
     fontWeight: '600',
     color: '#4A4A4A',
-    marginBottom: 8,
+    flex: 1,
+  },
+  solutionHeaderContainer: {
+    marginTop: 12,
+  },
+  solutionHeaderLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#8B0000',
+    flex: 1,
   },
   description: {
     fontSize: 16,
@@ -612,15 +652,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10,
   },
-  debugContainer: {
-    padding: 10,
-    backgroundColor: '#f0f0f0',
-    marginVertical: 10,
-    borderRadius: 8,
+  reloadIconContainer: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 18,
+    padding: 4,
+    zIndex: 10,
   },
-  debugText: {
-    color: '#666',
-    fontSize: 14,
-    marginBottom: 5,
-  }
 });

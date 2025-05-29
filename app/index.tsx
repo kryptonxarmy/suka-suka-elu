@@ -1,8 +1,26 @@
 import React from "react";
-import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  TouchableOpacity,
+  Linking,
+  ScrollView,
+  Alert,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { FontAwesome5, MaterialIcons, Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+
+// Data Fun Fact tanpa background image
+const funFactData = {
+  category: "STRAWBERRY FACTS",
+  title: "Do you know?",
+  content: "The red color of the strawberry is due to the anthocyanins found in its plant cells.",
+  sourceUrl: "https://www.sciencefocus.com/nature/",
+  moreUrl: undefined, // Atur ke url jika ingin tombol "More" aktif
+};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -22,13 +40,28 @@ export default function HomeScreen() {
     }
   };
 
+  // Fungsi pembuka URL dengan pengecekan
+  const handleOpenUrl = async (url?: string) => {
+    if (!url) return;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert("Tidak dapat membuka link", url);
+      }
+    } catch (err) {
+      Alert.alert("Terjadi kesalahan saat membuka link.");
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <ScrollView>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
           <Image
-            source={require("../assets/images/avatar.png")} // ganti dengan avatar kamu
+            source={require("../assets/images/avatar.png")}
             style={styles.avatar}
           />
           <Text style={styles.helloText}>Hello!</Text>
@@ -37,19 +70,25 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Fun Fact Box */}
-        <View style={styles.funFactBox}>
-          <Text style={styles.funFactTitle}>Do you know?</Text>
-          <Text style={styles.funFactContent}>The red color of the strawberry is due to the anthocyanins found in its plant cells.</Text>
-          <View style={styles.funFactButtons}>
+        {/* Fun Fact Card with Solid Color */}
+        <View style={styles.funFactCardSolid}>
+          {/* <Text style={styles.funFactCardCategory}>{funFactData.category}</Text> */}
+          <Text style={styles.funFactCardTitle}>{funFactData.title}</Text>
+          <Text style={styles.funFactCardContent}>{funFactData.content}</Text>
+          <View style={styles.funFactCardButtons}>
+            {funFactData.moreUrl && (
+              <TouchableOpacity
+                style={styles.cardButton}
+                onPress={() => handleOpenUrl(funFactData.moreUrl)}
+              >
+                <Text style={styles.cardButtonText}>More</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={styles.button}
-              // onPress={() => router.push('/funfact/detail')}
+              style={[styles.cardButton, styles.cardSourceButton]}
+              onPress={() => handleOpenUrl(funFactData.sourceUrl)}
             >
-              <Text style={styles.buttonText}>More</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, styles.sourceButton]} onPress={() => Linking.openURL("https://example.com")}>
-              <Text style={styles.sourceButtonText}>Source</Text>
+              <Text style={styles.cardSourceButtonText}>Source</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -57,7 +96,11 @@ export default function HomeScreen() {
         {/* Tips Section */}
         <View style={styles.tipsSection}>
           <View style={styles.tipsImage}>
-            <Image source={require("../assets/images/stroberi2.png")} style={styles.strawberryImage} resizeMode="contain" />
+            <Image
+              source={require("../assets/images/stroberi2.png")}
+              style={styles.strawberryImage}
+              resizeMode="contain"
+            />
           </View>
           <View style={styles.tipsBox}>
             <Text style={styles.tipsTitle}>Tips</Text>
@@ -96,12 +139,17 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFF5E4", // warna cream
+    backgroundColor: "#FFF5E4",
+  },
+  scrollContent: {
+    paddingBottom: 90,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 20,
+    marginTop: 10,
+    paddingHorizontal: 20,
   },
   avatar: {
     width: 50,
@@ -118,53 +166,64 @@ const styles = StyleSheet.create({
   infoButton: {
     padding: 5,
   },
-  funFactBox: {
-    backgroundColor: "#D46A6A",
+  // Fun Fact Card Styles (Solid Color)
+  funFactCardSolid: {
+    backgroundColor: "#90A17D",
     borderRadius: 15,
-    padding: 15,
+    padding: 18,
     marginHorizontal: 20,
     marginBottom: 25,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.13,
+    shadowRadius: 6,
   },
-  funFactTitle: {
+  funFactCardTitle: {
     color: "#fff",
     fontWeight: "bold",
-    fontSize: 16,
-    marginBottom: 5,
+    fontSize: 18,
+    marginBottom: 4,
   },
-  funFactContent: {
-    color: "#fff",
+  funFactCardContent: {
+    color: "#F5F5F5",
     fontSize: 14,
-    marginBottom: 15,
+    marginBottom: 12,
   },
-  funFactButtons: {
+  funFactCardButtons: {
     flexDirection: "row",
     gap: 10,
   },
-  button: {
-    backgroundColor: "#ffffff99",
+  cardButton: {
+    backgroundColor: "#fff",
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 10,
+    marginRight: 8,
   },
-  buttonText: {
+  cardButtonText: {
     color: "#6b4f4f",
     fontWeight: "bold",
   },
-  sourceButton: {
-    backgroundColor: "#ffffff22",
+  cardSourceButton: {
+    backgroundColor: "#fff",
   },
-  sourceButtonText: {
-    color: "#eee",
+  cardSourceButtonText: {
+   fontSize: 13,
+    fontWeight: "bold",
+    color: "#6b4f4f",
   },
+  // Tips Section
   tipsSection: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 40,
-    marginHorizontal: 20, 
+    marginHorizontal: 20,
+    marginBottom: 30,
   },
   tipsImage: {
-    width: 'auto',
-    position : 'relative',
+    width: "auto",
+    position: "relative",
   },
   strawberryImage: {
     width: 200,
@@ -178,6 +237,7 @@ const styles = StyleSheet.create({
     padding: 15,
     height: 300,
     width: "80%",
+    justifyContent: "center",
   },
   tipsTitle: {
     color: "#fff",
@@ -217,5 +277,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 10,
+    paddingHorizontal: 20,
   },
 });

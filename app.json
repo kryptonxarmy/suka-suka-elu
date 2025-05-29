@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "berrycare",
+    "name": "BerryCare",
     "slug": "berrycare",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,7 +17,8 @@
     ],
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rasya02.berrycare"
     },
     "android": {
       "adaptiveIcon": {
@@ -37,95 +38,91 @@
     },
     "androidStatusBar": {
       "backgroundColor": "#FAF0E6"
-    },
-    "web": {
-      "favicon": "./assets/images/favicon.png"
-    },
-    "androidx": true,
-    "jsEngine": "hermes",
-    "androidManifest": {
-      "android:usesCleartextTraffic": true,
-      "android:allowBackup": false,
-      "android:networkSecurityConfig": "@xml/network_security_config",
-      "android:debuggable": false,
-      "android:installLocation": "auto",
-      "android:icon": "@mipmap/ic_launcher",
-      "android:label": "@string/app_name",
-      "android:theme": "@style/AppTheme",
-      "android:usesCleartextTraffic": true,
-      "android:largeHeap": true,
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.MEDIA_LIBRARY",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.INTERNET"
-      ],
-      "package": "com.rasya02.berrycare"
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "expo": {
-            "name": "BerryCare",
-            "slug": "berrycare",
-            "version": "1.0.0",
-            "orientation": "portrait",
+    }
+  },
+  "androidx": true,
+  "jsEngine": "hermes",
+  "androidManifest": {
+    "android:usesCleartextTraffic": true,
+    "android:allowBackup": false,
+    "android:networkSecurityConfig": "@xml/network_security_config",
+    "android:debuggable": false,
+    "android:installLocation": "auto",
+    "android:icon": "@mipmap/ic_launcher",
+    "android:label": "@string/app_name",
+    "android:theme": "@style/AppTheme",
+    "android:largeHeap": true,
+    "permissions": [
+      "android.permission.CAMERA",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.MEDIA_LIBRARY",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.INTERNET"
+    ],
+    "package": "com.rasya02.berrycare"
+  },
+  "web": {
+    "bundler": "metro",
+    "output": "static",
+    "favicon": "./assets/images/favicon.png"
+  },
+  "plugins": [
+    "expo-router",
+    [
+      "expo-splash-screen",
+      {
+        "expo": {
+          "name": "BerryCare",
+          "slug": "berrycare",
+          "version": "1.0.0",
+          "orientation": "portrait",
+          "backgroundColor": "#FAF0E6",
+          "splash": {
+            "image": "assets/images/Stroberi-splash.png",
+            "resizeMode": "contain",
             "backgroundColor": "#FAF0E6",
-            "splash": {
-              "image": "assets/images/Stroberi-splash.png",
-              "resizeMode": "contain",
-              "backgroundColor": "#FAF0E6",
-              "imageResizeMode": "contain"
-            }
+            "imageResizeMode": "contain"
           }
         }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow berrycare to access your camera",
-          "microphonePermission": "Allow berrycare to access your microphone",
-          "recordAudioAndroid": true
-        }
-      ],
-      "expo-media-library",
-      "expo-image-picker",
-      "expo-font",
-      "expo-web-browser",
-      [
-        "expo-file-system",
-        {
-          "filePermission": "Aplikasi memerlukan akses untuk menyimpan gambar."
-        }
-      ],
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos.",
-          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos."
-        }
-      ]
-    ],
-    "experiments": {
-      "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "37af259a-85e8-44f0-8edc-bd7b9d015f48"
       }
-    },
-    "assets": [
-      "./assets/model/*"
+    ],
+    [
+      "expo-camera",
+      {
+        "cameraPermission": "Allow berrycare to access your camera",
+        "microphonePermission": "Allow berrycare to access your microphone",
+        "recordAudioAndroid": true
+      }
+    ],
+    "expo-media-library",
+    "expo-image-picker",
+    "expo-font",
+    "expo-web-browser",
+    [
+      "expo-file-system",
+      {
+        "filePermission": "Aplikasi memerlukan akses untuk menyimpan gambar."
+      }
+    ],
+    [
+      "expo-media-library",
+      {
+        "photosPermission": "Allow $(PRODUCT_NAME) to access your photos.",
+        "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos."
+      }
     ]
-  }
+  ],
+  "experiments": {
+    "typedRoutes": true
+  },
+  "extra": {
+    "router": {},
+    "eas": {
+      "projectId": "37af259a-85e8-44f0-8edc-bd7b9d015f48"
+    }
+  },
+  "assets": [
+    "./assets/model/*"
+  ]
 }

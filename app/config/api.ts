@@ -5,7 +5,7 @@ export const API_CONFIG = {
   }
 };
 
-export const PREDICT_URL = 'your-api-url-here';
+export const PREDICT_URL = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.predict}`;
 
 const api = {
   PREDICT_URL,

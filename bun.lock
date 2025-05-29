@@ -18,6 +18,7 @@
         "expo-constants": "~17.1.5",
         "expo-file-system": "~18.1.10",
         "expo-font": "~13.3.0",
+        "expo-gl": "~15.1.5",
         "expo-haptics": "~14.1.4",
         "expo-image": "~2.1.7",
         "expo-image-manipulator": "~13.1.7",
@@ -812,7 +813,7 @@
 
     "expo-font": ["expo-font@13.3.0", "", { "dependencies": { "fontfaceobserver": "^2.1.0" }, "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-TdbHoxCfLWN9Uvnqsrcak+5EkDCbNIWfgtNWx3JZ6sD9WYB7gvbS+Eu5YlZ85NvCOSJ9Khmw4mFQxEi2LUPZfQ=="],
 
-    "expo-gl": ["expo-gl@13.6.0", "", { "dependencies": { "invariant": "^2.2.4" }, "peerDependencies": { "expo": "*" } }, "sha512-hhRC2ZTDpc2YoElojutJTOYQsjSxX68lgL+2TSgWRrrvUXFeua1Ohz5DL/0iNCeoabs1earf/4qhxIdozkrhMA=="],
+    "expo-gl": ["expo-gl@15.1.5", "", { "dependencies": { "invariant": "^2.2.4" }, "peerDependencies": { "expo": "*", "react": "*", "react-native": "*", "react-native-web": "*" }, "optionalPeers": ["react-native-web"] }, "sha512-TUy9KoGIL4R6Og8DE6PbQ9gwUkBWpVSH/u6tYolCDibjHwLUMUWkt4e/upfcva5pf/a4eXMulJAWkxzuL7/EQg=="],
 
     "expo-haptics": ["expo-haptics@14.1.4", "", { "peerDependencies": { "expo": "*" } }, "sha512-QZdE3NMX74rTuIl82I+n12XGwpDWKb8zfs5EpwsnGi/D/n7O2Jd4tO5ivH+muEG/OCJOMq5aeaVDqqaQOhTkcA=="],
 
